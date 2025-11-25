@@ -1,0 +1,52 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: quantamkube-ingress
+  namespace: quantamkube
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - quantamkube.example.com
+    secretName: quantamkube-tls
+  rules:
+  - host: quantamkube.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: quantamkube-app
+            port:
+              number: 80
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: quantamkube-app
+  namespace: quantamkube
+spec:
+  selector:
+    matchLabels:
+      app: quantamkube-app
+  endpoints:
+  - port: http
+    interval: 30s
+    path: /metrics
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: quantamkube-config
+  namespace: quantamkube
+data:
+  app-name: "QuantamKube AI"
+  version: "1.0.0"
+  environment: "production"
