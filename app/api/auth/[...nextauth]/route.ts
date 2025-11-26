@@ -3,6 +3,7 @@ import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
 import { PrismaAdapter } from '@auth/prisma-adapter';
 import { prisma } from '@/lib/prisma';
+// @ts-ignore
 import bcrypt from 'bcryptjs';
 
 const handler = NextAuth({
@@ -54,6 +55,7 @@ const handler = NextAuth({
   callbacks: {
     async session({ session, user }) {
       if (session.user) {
+        // @ts-ignore
         session.user.id = user.id;
       }
       return session;

@@ -3,7 +3,7 @@
 import { Message } from '@/types';
 import { Copy, Download } from 'lucide-react';
 import { extractCodeBlocks, copyToClipboard, downloadFile } from '@/lib/utils';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import Button from './ui/Button';
 

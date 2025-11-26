@@ -1,13 +1,75 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
+import CredentialsProvider from 'next-auth/providers/credentials';
+import GoogleProvider from 'next-auth/providers/google';
+import { PrismaAdapter } from '@auth/prisma-adapter';
 import { prisma } from '@/lib/prisma';
 import { streamGenerateContent, createKubernetesPrompt } from '@/lib/gemini';
-import { handler as authHandler } from '@/app/api/auth/[...nextauth]/route';
+// @ts-ignore
+import bcrypt from 'bcryptjs';
+
+const authOptions = {
+  adapter: PrismaAdapter(prisma),
+  providers: [
+    CredentialsProvider({
+      name: 'Credentials',
+      credentials: {
+        email: { label: 'Email', type: 'email' },
+        password: { label: 'Password', type: 'password' },
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) {
+          throw new Error('Invalid credentials');
+        }
+
+        const user = await prisma.user.findUnique({
+          where: { email: credentials.email },
+        });
+
+        if (!user || !user.password) {
+          throw new Error('User not found');
+        }
+
+        const passwordMatch = await bcrypt.compare(credentials.password, user.password);
+
+        if (!passwordMatch) {
+          throw new Error('Invalid password');
+        }
+
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          image: user.image,
+        };
+      },
+    }),
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID || '',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+      allowDangerousEmailAccountLinking: true,
+    }),
+  ],
+  pages: {
+    signIn: '/auth/login',
+    error: '/auth/error',
+  },
+  callbacks: {
+    async session({ session, user }: any) {
+      if (session.user) {
+        // @ts-ignore
+        session.user.id = user.id;
+      }
+      return session;
+    },
+  },
+  secret: process.env.NEXTAUTH_SECRET,
+};
 
 export async function POST(request: NextRequest) {
   try {
     // Get session
-    const session = await getServerSession(authHandler);
+    const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -59,6 +121,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Get context from previous messages
+    if (!chat) {
+      return NextResponse.json({ error: 'Failed to create or find chat' }, { status: 500 });
+    }
+
     const previousMessages = chat.messages
       .filter((m) => m.role === 'assistant')
       .slice(-4)
@@ -78,6 +144,7 @@ export async function POST(request: NextRequest) {
     const prompt = createKubernetesPrompt(message, previousMessages);
 
     // Stream response
+    const chatId_: string = chat.id;
     const stream = new ReadableStream({
       async start(controller) {
         try {
@@ -93,7 +160,7 @@ export async function POST(request: NextRequest) {
           // Save assistant message
           await prisma.message.create({
             data: {
-              chatId: chat.id,
+              chatId: chatId_,
               role: 'assistant',
               content: fullResponse,
             },
@@ -120,9 +187,9 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
-    const session = await getServerSession(authHandler);
+    const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

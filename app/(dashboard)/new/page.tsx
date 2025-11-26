@@ -27,7 +27,7 @@ export default function NewChatPage() {
 
       // For now, redirect to a new chat page - in production this would be dynamic
       // We'll use a better approach after getting the chat ID
-      const text = await res.text();
+      await res.text();
       
       // Redirect back to dashboard which will load the latest chat
       router.push('/dashboard');
